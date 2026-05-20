@@ -23,7 +23,9 @@ export function mountApi(app: Hono, deps: ApiDeps): void {
       const traffic = deps.db.getTraffic(a.id, month) ?? { rx_bytes: 0, tx_bytes: 0 };
       return {
         vps_id: a.id,
-        label: a.label,
+        // Prefer the agent's self-reported label (e.g. auto-detected IP);
+        // fall back to the dashboard config label when the VPS is offline.
+        label: o?.snapshot?.label ?? a.label,
         traffic_quota_gb: a.traffic_quota_gb,
         online: !!o,
         ts: o?.ts ?? 0,
