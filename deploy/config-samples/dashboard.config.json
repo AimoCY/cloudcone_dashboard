@@ -1,0 +1,16 @@
+{
+  "listen_port": 8787,
+  "public_port": 9443,
+  "admin_password_hash": "REPLACE_WITH_BCRYPT_HASH",
+  "session_secret": "REPLACE_WITH_A_LONG_RANDOM_STRING",
+  "retention_days": 7,
+  "db_path": "/var/lib/vps-dashboard/dashboard.db",
+  "agents": [
+    { "id": "vps-a", "label": "VPS-A Tokyo", "token": "REPLACE_TOKEN_A", "traffic_quota_gb": 1000 },
+    { "id": "vps-b", "label": "VPS-B", "token": "REPLACE_TOKEN_B", "traffic_quota_gb": 1000 }
+  ],
+  "thresholds": {
+    "cpu_pct": 90, "mem_pct": 90, "disk_pct": 90, "traffic_pct": 90, "offline_seconds": 60
+  },
+  "telegram": { "bot_token": "REPLACE_TELEGRAM_BOT_TOKEN", "chat_id": "REPLACE_TELEGRAM_CHAT_ID" }
+}

@@ -1,0 +1,17 @@
+# Go
+/agent/vps-agent
+*.test
+# Node
+node_modules/
+dashboard/web/dist/
+dashboard/dist/
+*.tsbuildinfo
+# Runtime
+*.db
+*.db-*
+*.log
+state.json
+# Local config (never commit secrets)
+deploy/config-samples/*.local.yaml
+.env
+.DS_Store

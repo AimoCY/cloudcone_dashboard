@@ -1,0 +1,19 @@
+[Unit]
+Description=Cloudcone VPS dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vps-dashboard
+# The server is TypeScript run via the bundled tsx loader (installed by npm
+# install in /opt/vps-dashboard). No separate compile step.
+ExecStart=/opt/vps-dashboard/node_modules/.bin/tsx server/index.ts
+Environment=DASHBOARD_CONFIG=/etc/vps-dashboard/config.json
+Restart=always
+RestartSec=5
+StateDirectory=vps-dashboard
+User=deploy
+
+[Install]
+WantedBy=multi-user.target

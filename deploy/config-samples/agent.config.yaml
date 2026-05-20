@@ -1,0 +1,8 @@
+# Copy to /etc/vps-agent/config.yaml on each VPS and fill in the values.
+dashboard_url: https://your-dashboard.example.com:9443/ingest
+token: REPLACE_WITH_THIS_VPS_TOKEN      # must match an entry in dashboard.config.json agents[]
+vps_id: vps-a                           # unique id, must match dashboard agents[].id
+label: VPS-A                            # human-friendly name shown in the UI
+sample_interval_sec: 5
+traffic_reset_day: 1                    # billing cycle reset day (1..28)
+state_path: /var/lib/vps-agent/state.json

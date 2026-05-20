@@ -1,0 +1,17 @@
+[Unit]
+Description=Cloudcone VPS metrics agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vps-agent -config /etc/vps-agent/config.yaml
+Restart=always
+RestartSec=5
+# Dedicated unprivileged system user (created by install-agent.sh). The agent
+# only needs to read /proc and make outbound HTTP — no root required.
+User=vps-agent
+StateDirectory=vps-agent
+
+[Install]
+WantedBy=multi-user.target
