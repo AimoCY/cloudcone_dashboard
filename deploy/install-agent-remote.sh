@@ -9,14 +9,14 @@
 #   VPS_ID         (required) unique id; must match a dashboard agents[].id
 #   TOKEN          (required) bearer token for this VPS
 #   DASHBOARD_URL  (required) e.g. https://your-dashboard.example.com:9443/ingest
-#   AGENT_URL      (default: latest GitHub release binary, linux/amd64)
+#   AGENT_URL      (default: prebuilt linux/amd64 binary from this repo)
 #   LABEL          (default: this host's public IP)
 set -euo pipefail
 
 VPS_ID="${VPS_ID:?set VPS_ID}"
 TOKEN="${TOKEN:?set TOKEN}"
 DASHBOARD_URL="${DASHBOARD_URL:?set DASHBOARD_URL}"
-AGENT_URL="${AGENT_URL:-https://github.com/AimoCY/cloudcone_dashboard/releases/latest/download/vps-agent-linux-amd64}"
+AGENT_URL="${AGENT_URL:-https://raw.githubusercontent.com/AimoCY/cloudcone_dashboard/main/bin/vps-agent-linux-amd64}"
 LABEL="${LABEL:-$(curl -fsSL --max-time 10 https://api.ipify.org 2>/dev/null || hostname)}"
 
 [ "$(id -u)" = "0" ] || { echo "error: run as root (sudo)"; exit 1; }

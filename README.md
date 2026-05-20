@@ -70,8 +70,9 @@ curl -fsSL https://raw.githubusercontent.com/AimoCY/cloudcone_dashboard/main/dep
   | sudo VPS_ID=vps-b TOKEN=你的token DASHBOARD_URL=https://你的看板域名:9443/ingest bash
 ```
 
-脚本会自动下载 agent 二进制（来自 GitHub Release）、创建专用系统用户、写入配置、
-安装并启动 systemd 服务。`VPS_ID` 需与 Dashboard 配置里 `agents[]` 的某个 `id` 对应。
+脚本会自动下载 agent 二进制（仓库 `bin/` 内的预编译 linux/amd64 版本）、创建专用系统
+用户、写入配置、安装并启动 systemd 服务。`VPS_ID` 需与 Dashboard 配置里 `agents[]` 的
+某个 `id` 对应。
 
 ## 测试
 
