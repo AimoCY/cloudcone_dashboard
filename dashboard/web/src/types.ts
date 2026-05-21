@@ -28,3 +28,37 @@ export interface SeriesResponse {
 export type SeriesMetric =
   | "cpu_pct" | "load1" | "mem_used" | "swap_used"
   | "disk_read_bps" | "disk_write_bps" | "net_rx_bps" | "net_tx_bps" | "disk_pct_max";
+
+export interface AlertLogRow {
+  id: number;
+  vps_id: string;
+  metric: string;
+  event: "triggered" | "recovered";
+  value: number;
+  ts: number;
+}
+
+export interface Thresholds {
+  cpu_pct: number; mem_pct: number; disk_pct: number;
+  traffic_pct: number; offline_seconds: number;
+}
+
+export interface SettingsView {
+  thresholds: Thresholds;
+  retention_days: number;
+  telegram: { chat_id: string; bot_token_set: boolean };
+  email: {
+    smtp_host: string; smtp_port: number; smtp_user: string;
+    from: string; recipients: string; smtp_pass_set: boolean;
+  };
+}
+
+export interface SettingsPatch {
+  thresholds?: Partial<Thresholds>;
+  retention_days?: number;
+  telegram?: { chat_id?: string; bot_token?: string };
+  email?: {
+    smtp_host?: string; smtp_port?: number; smtp_user?: string;
+    smtp_pass?: string; from?: string; recipients?: string;
+  };
+}

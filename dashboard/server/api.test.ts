@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { Hono } from "hono";
 import { mountApi } from "./api.js";
 import { openDb } from "./db.js";
+import { SettingsStore, type EditableSettings } from "./settings.js";
 import type { Snapshot } from "./contract.js";
 
 function snap(ts: number, cpu: number): Snapshot {
@@ -20,21 +24,30 @@ function snap(ts: number, cpu: number): Snapshot {
   };
 }
 
+const settingsDefaults: EditableSettings = {
+  thresholds: { cpu_pct: 90, mem_pct: 90, disk_pct: 90, traffic_pct: 90, offline_seconds: 60 },
+  retention_days: 7,
+  telegram: { bot_token: "secret-bot-token", chat_id: "123" },
+  email: { smtp_host: "", smtp_port: 587, smtp_user: "", smtp_pass: "", from: "", recipients: "" },
+};
+
 function setup() {
   const db = openDb(":memory:");
   for (let t = 1000; t < 1100; t++) db.insertSnapshot(snap(t, t % 100));
+  const settings = new SettingsStore(join(mkdtempSync(join(tmpdir(), "api-")), "s.json"), settingsDefaults);
   const app = new Hono();
   mountApi(app, {
     db,
     agents: [{ id: "vps-a", label: "VPS-A", traffic_quota_gb: 10 }],
     alertSnapshot: () => ({ "vps-a": ["cpu_pct"] }),
+    settings,
   });
-  return app;
+  return { app, db, settings };
 }
 
 describe("api", () => {
   it("GET /api/overview returns each VPS with its quota and alert flags", async () => {
-    const res = await setup().request("/api/overview");
+    const res = await setup().app.request("/api/overview");
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body[0].vps_id).toBe("vps-a");
@@ -43,7 +56,7 @@ describe("api", () => {
   });
 
   it("GET /api/series returns downsampled points", async () => {
-    const res = await setup().request("/api/series?vps=vps-a&metric=cpu_pct&from=1000&to=1099");
+    const res = await setup().app.request("/api/series?vps=vps-a&metric=cpu_pct&from=1000&to=1099");
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body.points)).toBe(true);
@@ -51,13 +64,44 @@ describe("api", () => {
   });
 
   it("GET /api/series rejects an unknown metric", async () => {
-    const res = await setup().request("/api/series?vps=vps-a&metric=evil&from=0&to=9");
+    const res = await setup().app.request("/api/series?vps=vps-a&metric=evil&from=0&to=9");
     expect(res.status).toBe(400);
   });
 
   it("GET /api/processes returns the latest top processes", async () => {
-    const res = await setup().request("/api/processes?vps=vps-a");
+    const res = await setup().app.request("/api/processes?vps=vps-a");
     const body = await res.json();
     expect(body.cpu[0].name).toBe("node");
+  });
+
+  it("GET /api/alert-log returns stored events newest-first", async () => {
+    const { app, db } = setup();
+    db.appendAlertLog({ vps_id: "vps-a", metric: "cpu_pct", event: "triggered", value: 95, ts: 10 });
+    const res = await app.request("/api/alert-log");
+    const body = await res.json();
+    expect(body[0].metric).toBe("cpu_pct");
+    expect(body[0].event).toBe("triggered");
+  });
+
+  it("GET /api/settings masks the bot token", async () => {
+    const res = await setup().app.request("/api/settings");
+    const body = await res.json();
+    expect(body.telegram.bot_token).toBeUndefined();
+    expect(body.telegram.bot_token_set).toBe(true);
+    expect(body.thresholds.cpu_pct).toBe(90);
+  });
+
+  it("PUT /api/settings updates thresholds and keeps the secret when omitted", async () => {
+    const { app, settings } = setup();
+    const res = await app.request("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thresholds: { cpu_pct: 75 }, telegram: { chat_id: "999" } }),
+    });
+    expect(res.status).toBe(200);
+    expect(settings.get().thresholds.cpu_pct).toBe(75);
+    expect(settings.get().thresholds.mem_pct).toBe(90);
+    expect(settings.get().telegram.chat_id).toBe("999");
+    expect(settings.get().telegram.bot_token).toBe("secret-bot-token"); // unchanged
   });
 });

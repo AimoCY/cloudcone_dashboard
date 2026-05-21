@@ -1,82 +1,86 @@
 import { useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import { api } from "../api.js";
-import type { SeriesMetric } from "../types.js";
-import { RANGE_SECONDS, type Range } from "../pages/Dashboard.js";
+import { useDark } from "../theme.js";
 
-const BYTES_METRICS: SeriesMetric[] = [
-  "mem_used", "swap_used", "disk_read_bps", "disk_write_bps", "net_rx_bps", "net_tx_bps",
-];
+export type ChartKind = "pct" | "bps" | "bytes" | "num";
 
-// Dark-theme axis styling so charts are legible on the dark dashboard.
-const AXIS = {
-  stroke: "#7d8794",
-  grid: { stroke: "#232a37", width: 1 },
-  ticks: { stroke: "#232a37", width: 1 },
-};
-
-function fmtValue(metric: SeriesMetric, v: number): string {
-  if (metric === "cpu_pct" || metric === "disk_pct_max") return `${v.toFixed(0)}%`;
-  if (BYTES_METRICS.includes(metric)) {
-    if (v > 1024 ** 2) return `${(v / 1024 ** 2).toFixed(1)}M`;
-    if (v > 1024) return `${(v / 1024).toFixed(0)}K`;
-    return `${v.toFixed(0)}`;
+export function fmtKind(kind: ChartKind, v: number): string {
+  if (v == null) return "";
+  if (kind === "pct") return `${v.toFixed(0)}%`;
+  if (kind === "bps" || kind === "bytes") {
+    if (v >= 1024 ** 3) return `${(v / 1024 ** 3).toFixed(1)}G`;
+    if (v >= 1024 ** 2) return `${(v / 1024 ** 2).toFixed(1)}M`;
+    if (v >= 1024) return `${(v / 1024).toFixed(0)}K`;
+    return v.toFixed(0);
   }
   return v.toFixed(2);
 }
 
-export function TimeChart(
-  { vps, metric, label, range }: { vps: string; metric: SeriesMetric; label: string; range: Range },
-) {
+// Interactive uPlot line chart, themed to the line-frame design (light/dark).
+export function TimeChart({
+  data, label, kind, height = 240,
+}: {
+  data: { t: number; v: number }[];
+  label: string;
+  kind: ChartKind;
+  height?: number;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
+  const dark = useDark();
 
   useEffect(() => {
-    let alive = true;
-    async function load() {
-      const to = Math.floor(Date.now() / 1000);
-      const from = to - RANGE_SECONDS[range];
-      const resp = await api.series(vps, metric, from, to);
-      if (!alive || !hostRef.current) return;
-      const xs = resp.points.map((p) => p.t);
-      const ys = resp.points.map((p) => p.v);
-      const data: uPlot.AlignedData = [xs, ys];
-      if (plotRef.current) {
-        plotRef.current.setData(data);
-      } else {
-        plotRef.current = new uPlot(
-          {
-            title: label,
-            width: hostRef.current.clientWidth || 360,
-            height: 140,
-            scales: { x: { time: true } },
-            series: [
-              {},
-              {
-                label, stroke: "#4f9cff", width: 2, fill: "rgba(79,156,255,0.12)",
-                value: (_u, v) => (v == null ? "" : fmtValue(metric, v)),
-              },
-            ],
-            axes: [
-              { ...AXIS },
-              { ...AXIS, values: (_u, vals) => vals.map((v) => fmtValue(metric, v)) },
-            ],
-          },
-          data,
-          hostRef.current,
-        );
-      }
-    }
-    load();
-    const id = setInterval(load, 10_000);
+    const host = hostRef.current;
+    if (!host) return;
+    const cs = getComputedStyle(document.documentElement);
+    const cssv = (n: string) => cs.getPropertyValue(n).trim();
+    const axisColor = cssv("--mut");
+    const gridColor = cssv("--line-2");
+    const stroke = cssv("--ink-2");
+
+    const xs = data.map((p) => p.t);
+    const ys = data.map((p) => p.v);
+    const axis = {
+      stroke: axisColor,
+      grid: { stroke: gridColor, width: 1 },
+      ticks: { stroke: gridColor, width: 1 },
+      font: "11px var(--mono)",
+    };
+    const opts: uPlot.Options = {
+      width: host.clientWidth || 600,
+      height,
+      scales: { x: { time: true } },
+      legend: { show: false },
+      cursor: { points: { size: 5 } },
+      series: [
+        {},
+        {
+          label,
+          stroke,
+          width: 1.6,
+          fill: dark ? "rgba(212,212,216,0.06)" : "rgba(63,63,70,0.06)",
+          value: (_u, v) => fmtKind(kind, v as number),
+        },
+      ],
+      axes: [
+        { ...axis },
+        { ...axis, size: 50, values: (_u, vals) => vals.map((v) => fmtKind(kind, v as number)) },
+      ],
+    };
+    plotRef.current?.destroy();
+    plotRef.current = new uPlot(opts, [xs, ys] as uPlot.AlignedData, host);
+
+    const ro = new ResizeObserver(() => {
+      if (plotRef.current) plotRef.current.setSize({ width: host.clientWidth, height });
+    });
+    ro.observe(host);
     return () => {
-      alive = false;
-      clearInterval(id);
+      ro.disconnect();
       plotRef.current?.destroy();
       plotRef.current = null;
     };
-  }, [vps, metric, range, label]);
+  }, [data, label, kind, height, dark]);
 
-  return <div className="chart" ref={hostRef} />;
+  return <div ref={hostRef} style={{ width: "100%" }} />;
 }

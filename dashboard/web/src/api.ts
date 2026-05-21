@@ -1,4 +1,6 @@
-import type { OverviewRow, SeriesResponse, SeriesMetric, Proc } from "./types.js";
+import type {
+  OverviewRow, SeriesResponse, SeriesMetric, Proc, AlertLogRow, SettingsView, SettingsPatch,
+} from "./types.js";
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { credentials: "same-origin" });
@@ -22,4 +24,15 @@ export const api = {
     getJson<SeriesResponse>(`/api/series?vps=${vps}&metric=${metric}&from=${from}&to=${to}`),
   processes: (vps: string) =>
     getJson<{ cpu: Proc[]; mem: Proc[] }>(`/api/processes?vps=${vps}`),
+  alertLog: () => getJson<AlertLogRow[]>("/api/alert-log"),
+  getSettings: () => getJson<SettingsView>("/api/settings"),
+  async putSettings(patch: SettingsPatch): Promise<boolean> {
+    const res = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(patch),
+    });
+    return res.ok;
+  },
 };

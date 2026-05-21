@@ -25,6 +25,14 @@ const ConfigSchema = z.object({
     bot_token: z.string(),
     chat_id: z.string(),
   }),
+  email: z.object({
+    smtp_host: z.string().default(""),
+    smtp_port: z.number().int().default(587),
+    smtp_user: z.string().default(""),
+    smtp_pass: z.string().default(""),
+    from: z.string().default(""),
+    recipients: z.string().default(""),
+  }).default({}),
 });
 
 export type DashboardConfig = z.infer<typeof ConfigSchema>;

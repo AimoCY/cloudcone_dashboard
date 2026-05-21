@@ -1,16 +1,18 @@
-// Dashboard entrypoint. Wires config -> db -> ingest/api/auth -> alert engine,
-// schedules the offline check and retention job, and serves the built frontend.
+// Dashboard entrypoint. Wires config -> db -> ingest/api/auth -> alert engine
+// with a runtime settings store, schedules background jobs, serves the frontend.
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db.js";
 import { mountIngest } from "./ingest.js";
 import { mountApi } from "./api.js";
 import { mountAuth, requireSession } from "./auth.js";
 import { AlertEngine } from "./alerts.js";
-import { Telegram } from "./telegram.js";
+import { SettingsStore } from "./settings.js";
+import { FanoutNotifier } from "./notifier.js";
 import { runRetention } from "./retention.js";
 import type { Snapshot } from "./contract.js";
 
@@ -18,8 +20,21 @@ const configPath = process.env.DASHBOARD_CONFIG ?? "./dashboard.config.json";
 const cfg = loadConfig(configPath);
 const db = openDb(cfg.db_path);
 
-const telegram = new Telegram(cfg.telegram.bot_token, cfg.telegram.chat_id);
-const alerts = new AlertEngine(cfg.thresholds, telegram);
+// Runtime-editable settings: config.json supplies defaults, settings.json
+// (next to the DB) holds overrides made via the Settings page.
+const settings = new SettingsStore(join(dirname(cfg.db_path), "settings.json"), {
+  thresholds: cfg.thresholds,
+  retention_days: cfg.retention_days,
+  telegram: cfg.telegram,
+  email: cfg.email,
+});
+
+const notifier = new FanoutNotifier(settings);
+const alerts = new AlertEngine(
+  () => settings.get().thresholds,
+  notifier,
+  (e) => db.appendAlertLog(e),
+);
 
 const quotaBytesOf = (id: string) =>
   (cfg.agents.find((a) => a.id === id)?.traffic_quota_gb ?? 1) * 1024 ** 3;
@@ -42,11 +57,9 @@ mountIngest(app, { db, agents: cfg.agents, onSample });
 
 // All /api/* routes require a session.
 app.use("/api/*", requireSession(cfg.session_secret));
-mountApi(app, { db, agents: cfg.agents, alertSnapshot: () => alerts.snapshot() });
+mountApi(app, { db, agents: cfg.agents, alertSnapshot: () => alerts.snapshot(), settings });
 
-// Public agent self-install endpoint: serves the install script + agent binary
-// from ./install (no auth — neither file contains secrets; the token is
-// supplied by the operator running the script).
+// Public agent self-install endpoint.
 if (existsSync("./install")) {
   app.use("/install/*", serveStatic({ root: "./" }));
 }
@@ -61,7 +74,7 @@ if (existsSync(webDist)) {
 // Background jobs.
 setInterval(() => alerts.checkOffline(Math.floor(Date.now() / 1000)), 15_000);
 setInterval(() => {
-  const removed = runRetention(db, cfg.retention_days, Math.floor(Date.now() / 1000));
+  const removed = runRetention(db, settings.get().retention_days, Math.floor(Date.now() / 1000));
   if (removed > 0) console.log(`retention: removed ${removed} old samples`);
 }, 60 * 60 * 1000);
 

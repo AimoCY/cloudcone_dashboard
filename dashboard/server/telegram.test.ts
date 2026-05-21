@@ -1,11 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { Telegram } from "./telegram.js";
+import { sendTelegram } from "./telegram.js";
 
-describe("Telegram", () => {
+describe("sendTelegram", () => {
   it("posts a message to the bot API with token and chat id", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-    const tg = new Telegram("BOT", "CHAT", fetchMock as unknown as typeof fetch);
-    await tg.send("hello");
+    await sendTelegram({ bot_token: "BOT", chat_id: "CHAT" }, "hello", fetchMock as unknown as typeof fetch);
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toContain("/botBOT/sendMessage");
@@ -15,14 +14,14 @@ describe("Telegram", () => {
 
   it("does not throw when fetch rejects", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("network"));
-    const tg = new Telegram("BOT", "CHAT", fetchMock as unknown as typeof fetch);
-    await expect(tg.send("x")).resolves.toBeUndefined();
+    await expect(
+      sendTelegram({ bot_token: "BOT", chat_id: "CHAT" }, "x", fetchMock as unknown as typeof fetch),
+    ).resolves.toBeUndefined();
   });
 
-  it("is a no-op when bot token is empty", async () => {
+  it("is a no-op when bot token or chat id is empty", async () => {
     const fetchMock = vi.fn();
-    const tg = new Telegram("", "", fetchMock as unknown as typeof fetch);
-    await tg.send("x");
+    await sendTelegram({ bot_token: "", chat_id: "" }, "x", fetchMock as unknown as typeof fetch);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

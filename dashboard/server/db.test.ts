@@ -68,4 +68,14 @@ describe("db", () => {
     db.insertSnapshot(snap({ ts: 1001, traffic: { month: "2026-05", rx_bytes: 200, tx_bytes: 250 } }));
     expect(db.getTraffic("vps-a", "2026-05")).toEqual({ rx_bytes: 200, tx_bytes: 250 });
   });
+
+  it("appends and reads back alert log events newest-first", () => {
+    const db = memDb();
+    db.appendAlertLog({ vps_id: "vps-a", metric: "cpu_pct", event: "triggered", value: 95, ts: 100 });
+    db.appendAlertLog({ vps_id: "vps-a", metric: "cpu_pct", event: "recovered", value: 40, ts: 200 });
+    const log = db.getAlertLog(10);
+    expect(log).toHaveLength(2);
+    expect(log[0].ts).toBe(200);
+    expect(log[0].event).toBe("recovered");
+  });
 });

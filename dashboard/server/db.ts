@@ -48,6 +48,10 @@ export interface OverviewRow {
 }
 export interface SeriesPoint { t: number; v: number; }
 
+export interface AlertLogRow {
+  id: number; vps_id: string; metric: string; event: string; value: number; ts: number;
+}
+
 export interface Db {
   insertSnapshot(s: Snapshot): void;
   getOverview(): OverviewRow[];
@@ -55,6 +59,8 @@ export interface Db {
   getProcesses(vps: string): { cpu: Snapshot["top_proc_cpu"]; mem: Snapshot["top_proc_mem"] };
   getTraffic(vps: string, month: string): { rx_bytes: number; tx_bytes: number } | null;
   deleteOlderThan(cutoffTs: number): number;
+  appendAlertLog(e: Omit<AlertLogRow, "id">): void;
+  getAlertLog(limit: number): AlertLogRow[];
   raw: Database.Database;
 }
 
@@ -78,6 +84,9 @@ export function openDb(path: string): Db {
   const insTraffic = sql.prepare(`
     INSERT OR REPLACE INTO monthly_traffic (vps_id, month, rx_bytes, tx_bytes)
     VALUES (@vps_id,@month,@rx_bytes,@tx_bytes)`);
+  const insAlert = sql.prepare(`
+    INSERT INTO alert_log (vps_id, metric, event, value, ts)
+    VALUES (@vps_id,@metric,@event,@value,@ts)`);
 
   function insertSnapshot(s: Snapshot): void {
     const diskPctMax = s.disks.reduce((m, d) => Math.max(m, d.percent), 0);
@@ -147,5 +156,18 @@ export function openDb(path: string): Db {
     return sql.prepare(`DELETE FROM samples WHERE ts < ?`).run(cutoffTs).changes;
   }
 
-  return { insertSnapshot, getOverview, getSeries, getProcesses, getTraffic, deleteOlderThan, raw: sql };
+  function appendAlertLog(e: Omit<AlertLogRow, "id">): void {
+    insAlert.run({ vps_id: e.vps_id, metric: e.metric, event: e.event, value: e.value, ts: e.ts });
+  }
+
+  function getAlertLog(limit: number): AlertLogRow[] {
+    return sql.prepare(
+      `SELECT id, vps_id, metric, event, value, ts FROM alert_log ORDER BY ts DESC, id DESC LIMIT ?`,
+    ).all(limit) as AlertLogRow[];
+  }
+
+  return {
+    insertSnapshot, getOverview, getSeries, getProcesses, getTraffic,
+    deleteOlderThan, appendAlertLog, getAlertLog, raw: sql,
+  };
 }
