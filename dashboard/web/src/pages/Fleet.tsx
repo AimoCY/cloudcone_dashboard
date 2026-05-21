@@ -51,7 +51,10 @@ function HotspotCard({ row, range }: { row: OverviewRow; range: Range }) {
         </span>
         <span className="mut mono" style={{ fontSize: 10 }}>{row.alerting.join(" · ") || "—"}</span>
       </div>
-      <div className="grow"><Sparkline data={pts} w={420} h={48} color={cpuTone} filled /></div>
+      <div className="grow">
+        <Sparkline data={pts} w={420} h={48}
+          stroke={cpuTone === "bad" ? "var(--red)" : "var(--amber)"} filled />
+      </div>
       <div className="col" style={{ alignItems: "flex-end", gap: 2 }}>
         <span className={`mono ${cpuTone}`} style={{ fontSize: 30, fontWeight: 500, lineHeight: 1 }}>
           {cpu.toFixed(0)}<span style={{ fontSize: 13, color: "var(--mut)" }}>%</span>

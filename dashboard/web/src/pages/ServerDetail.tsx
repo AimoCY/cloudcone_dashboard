@@ -9,12 +9,12 @@ import { RangeTabs } from "../components/RangeTabs.js";
 import { Sparkline } from "../components/Sparkline.js";
 import { TimeChart, type ChartKind } from "../components/TimeChart.js";
 
-const METRICS: { key: SeriesMetric; label: string; kind: ChartKind }[] = [
-  { key: "cpu_pct", label: "CPU", kind: "pct" },
-  { key: "mem_used", label: "内存", kind: "bytes" },
-  { key: "net_rx_bps", label: "下行", kind: "bps" },
-  { key: "net_tx_bps", label: "上行", kind: "bps" },
-  { key: "disk_pct_max", label: "磁盘", kind: "pct" },
+const METRICS: { key: SeriesMetric; label: string; kind: ChartKind; colorVar: string }[] = [
+  { key: "cpu_pct", label: "CPU", kind: "pct", colorVar: "--m-cpu" },
+  { key: "mem_used", label: "内存", kind: "bytes", colorVar: "--m-mem" },
+  { key: "net_rx_bps", label: "下行", kind: "bps", colorVar: "--m-net-rx" },
+  { key: "net_tx_bps", label: "上行", kind: "bps", colorVar: "--m-net-tx" },
+  { key: "disk_pct_max", label: "磁盘", kind: "pct", colorVar: "--m-disk" },
 ];
 
 function netSum(s: Snapshot) {
@@ -127,16 +127,19 @@ export function ServerDetail({ vpsId }: { vpsId: string }) {
           return (
             <button key={m.key} onClick={() => setSelected(m.key)} className="col gap-4"
               style={{
-                background: "transparent", border: "none", cursor: "pointer", textAlign: "left",
-                padding: "8px 10px", borderBottom: on ? "2px solid var(--ink)" : "2px solid transparent",
+                border: "none", cursor: "pointer", textAlign: "left", padding: "10px 12px",
+                borderBottom: on ? "2px solid var(--primary)" : "2px solid transparent",
               }}>
-              <span className="h-eyebrow">{m.label}</span>
+              <div className="row gap-6">
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: `var(${m.colorVar})`, flex: "0 0 auto" }} />
+                <span className="h-eyebrow">{m.label}</span>
+              </div>
               <div className="row gap-2" style={{ alignItems: "baseline" }}>
                 <span className={`mono ${tv.tone}`} style={{ fontSize: 24, fontWeight: 500, lineHeight: 1 }}>{tv.v}</span>
                 <span className="mono mut" style={{ fontSize: 11 }}>{tv.u}</span>
               </div>
-              <Sparkline data={(series[m.key] ?? []).map((p) => p.v)} w={150} h={22}
-                color={tv.tone} filled />
+              <Sparkline data={(series[m.key] ?? []).map((p) => p.v)} w={150} h={26}
+                stroke={`var(${m.colorVar})`} filled />
             </button>
           );
         })}
@@ -151,7 +154,7 @@ export function ServerDetail({ vpsId }: { vpsId: string }) {
           </span>
         </div>
         {selData.length > 1
-          ? <TimeChart data={selData} label={sel.label} kind={sel.kind} height={260} />
+          ? <TimeChart data={selData} label={sel.label} kind={sel.kind} colorVar={sel.colorVar} height={260} />
           : <p className="mut" style={{ fontSize: 12 }}>该时间范围内还没有数据。</p>}
       </div>
 
