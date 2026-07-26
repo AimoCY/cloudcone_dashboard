@@ -1,18 +1,11 @@
 import type { Hono } from "hono";
-import { timingSafeEqual } from "node:crypto";
 import { SnapshotSchema, type Snapshot } from "./contract.js";
 import type { Db } from "./db.js";
+import { hashSecret } from "./secrets.js";
 
-export interface IngestAgent { id: string; token: string; traffic_quota_gb: number; }
 export interface IngestDeps {
   db: Db;
-  agents: IngestAgent[];
   onSample: (s: Snapshot) => void; // hook for the alert engine
-}
-
-function tokenEq(a: string, b: string): boolean {
-  const ab = Buffer.from(a), bb = Buffer.from(b);
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
 // mountIngest registers POST /ingest — Bearer-token auth, schema validation, store.
@@ -20,7 +13,7 @@ export function mountIngest(app: Hono, deps: IngestDeps): void {
   app.post("/ingest", async (c) => {
     const auth = c.req.header("Authorization") ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    const agent = deps.agents.find((a) => tokenEq(a.token, token));
+    const agent = token ? deps.db.getManagedAgentByTokenHash(hashSecret(token)) : undefined;
     if (!token || !agent) return c.json({ error: "unauthorized" }, 401);
 
     let body: unknown;

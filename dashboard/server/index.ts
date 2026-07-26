@@ -15,10 +15,26 @@ import { SettingsStore } from "./settings.js";
 import { FanoutNotifier } from "./notifier.js";
 import { runRetention } from "./retention.js";
 import type { Snapshot } from "./contract.js";
+import { hashSecret } from "./secrets.js";
 
 const configPath = process.env.DASHBOARD_CONFIG ?? "./dashboard.config.json";
 const cfg = loadConfig(configPath);
 const db = openDb(cfg.db_path);
+
+// Config users/agents bootstrap existing installations into the database.
+// User-created accounts and VPSes live only in SQLite after that.
+const bootNow = Math.floor(Date.now() / 1000);
+for (const user of cfg.users) db.upsertBootstrapUser(user, bootNow);
+for (const agent of cfg.agents) {
+  db.upsertBootstrapAgent({
+    id: agent.id,
+    owner_user_id: agent.owner_user_id,
+    label: agent.label,
+    token_hash: hashSecret(agent.token),
+    traffic_quota_gb: agent.traffic_quota_gb,
+    traffic_reset_day: agent.traffic_reset_day,
+  }, bootNow);
+}
 
 // Runtime-editable settings: config.json supplies defaults, settings.json
 // (next to the DB) holds overrides made via the Settings page.
@@ -27,17 +43,25 @@ const settings = new SettingsStore(join(dirname(cfg.db_path), "settings.json"), 
   retention_days: cfg.retention_days,
   telegram: cfg.telegram,
   email: cfg.email,
-});
+}, cfg.users.filter((u) => u.role === "admin").map((u) => u.id));
 
-const notifier = new FanoutNotifier(settings);
+const ownerOf = (vps: string) => db.getManagedAgent(vps)?.owner_user_id;
+const notifier = new FanoutNotifier(settings, ownerOf);
 const alerts = new AlertEngine(
-  () => settings.get().thresholds,
+  (vps) => settings.get(ownerOf(vps)!).thresholds,
   notifier,
   (e) => db.appendAlertLog(e),
 );
 
+// Seed offline tracking from persisted latest rows. Without this, an agent
+// that is already offline when the dashboard restarts is never checked until
+// it has reported once again.
+for (const latest of db.getOverview()) {
+  if (ownerOf(latest.vps_id)) alerts.markSeen(latest.vps_id, latest.ts);
+}
+
 const quotaBytesOf = (id: string) =>
-  (cfg.agents.find((a) => a.id === id)?.traffic_quota_gb ?? 1) * 1024 ** 3;
+  (db.getManagedAgent(id)?.traffic_quota_gb ?? 1) * 1024 ** 3;
 
 // Bridge an ingested snapshot into the alert engine.
 function onSample(s: Snapshot): void {
@@ -52,12 +76,18 @@ function onSample(s: Snapshot): void {
 }
 
 const app = new Hono();
-mountAuth(app, { passwordHash: cfg.admin_password_hash, sessionSecret: cfg.session_secret });
-mountIngest(app, { db, agents: cfg.agents, onSample });
+const authConfig = { db, sessionSecret: cfg.session_secret };
+mountAuth(app, authConfig);
+mountIngest(app, { db, onSample });
 
 // All /api/* routes require a session.
-app.use("/api/*", requireSession(cfg.session_secret));
-mountApi(app, { db, agents: cfg.agents, alertSnapshot: () => alerts.snapshot(), settings });
+app.use("/api/*", requireSession(authConfig));
+mountApi(app, {
+  db,
+  alertSnapshot: () => alerts.snapshot(),
+  settings,
+  onAgentDeleted: (vps) => alerts.remove(vps),
+});
 
 // Public agent self-install endpoint.
 if (existsSync("./install")) {
@@ -74,7 +104,7 @@ if (existsSync(webDist)) {
 // Background jobs.
 setInterval(() => alerts.checkOffline(Math.floor(Date.now() / 1000)), 15_000);
 setInterval(() => {
-  const removed = runRetention(db, settings.get().retention_days, Math.floor(Date.now() / 1000));
+  const removed = runRetention(db, settings.getRetentionDays(), Math.floor(Date.now() / 1000));
   if (removed > 0) console.log(`retention: removed ${removed} old samples`);
 }, 60 * 60 * 1000);
 

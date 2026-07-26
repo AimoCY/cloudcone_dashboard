@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { mountIngest } from "./ingest.js";
 import { openDb } from "./db.js";
 import type { Snapshot } from "./contract.js";
+import { hashSecret } from "./secrets.js";
 
 function payload(over: Partial<Snapshot> = {}): Snapshot {
   return {
@@ -21,13 +22,20 @@ function payload(over: Partial<Snapshot> = {}): Snapshot {
 
 function setup() {
   const db = openDb(":memory:");
+  db.upsertBootstrapUser({
+    id: "admin", username: "admin", password_hash: "hash", role: "admin",
+  }, 1);
+  db.upsertBootstrapAgent({
+    id: "vps-a", owner_user_id: "admin", label: "VPS-A",
+    token_hash: hashSecret("tok-a"), traffic_quota_gb: 1000, traffic_reset_day: 1,
+  }, 1);
+  db.upsertBootstrapAgent({
+    id: "vps-b", owner_user_id: "admin", label: "VPS-B",
+    token_hash: hashSecret("tok-b"), traffic_quota_gb: 1000, traffic_reset_day: 1,
+  }, 1);
   const onSample = vi.fn();
   const app = new Hono();
-  const agents = [
-    { id: "vps-a", token: "tok-a", traffic_quota_gb: 1000 },
-    { id: "vps-b", token: "tok-b", traffic_quota_gb: 1000 },
-  ];
-  mountIngest(app, { db, agents, onSample });
+  mountIngest(app, { db, onSample });
   return { app, db, onSample };
 }
 

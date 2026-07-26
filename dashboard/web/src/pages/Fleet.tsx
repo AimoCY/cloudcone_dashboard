@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import type { OverviewRow, Snapshot } from "../types.js";
+import type { CurrentUser, OverviewRow, Snapshot } from "../types.js";
 import { useOverview } from "../hooks.js";
 import { type Range, RANGE_SECONDS } from "../range.js";
 import { GB, fmtBps, fmtTraffic, gb, uptimeStr, memPct } from "../format.js";
@@ -145,7 +145,7 @@ function ServerCard({ row }: { row: OverviewRow }) {
   );
 }
 
-export function Fleet() {
+export function Fleet({ user }: { user: CurrentUser }) {
   const { rows, error, loaded } = useOverview();
   const [range, setRange] = useState<Range>("1h");
 
@@ -174,7 +174,7 @@ export function Fleet() {
 
   return (
     <div className="app">
-      <TopNav active="fleet" right={
+      <TopNav active="fleet" user={user} right={
         <>
           <span className="chip"><span className="dot ok" />{online.length} 在线</span>
           {firing > 0 && <span className="chip bad"><span className="dot bad" />{firing} 告警</span>}

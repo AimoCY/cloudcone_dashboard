@@ -1,5 +1,11 @@
 export interface Proc { pid: number; name: string; cpu_pct: number; mem_pct: number; }
 
+export interface CurrentUser {
+  id: string;
+  username: string;
+  role: "admin" | "user";
+}
+
 export interface Snapshot {
   vps_id: string; label: string; ts: number; uptime_sec: number;
   cpu: { total_pct: number; per_core: number[] };
@@ -15,10 +21,39 @@ export interface Snapshot {
 
 export interface OverviewRow {
   vps_id: string; label: string; traffic_quota_gb: number;
+  configured_label: string;
+  owner_user_id: string;
+  owner_username: string;
+  traffic_reset_day: number;
+  source: "config" | "user";
   online: boolean; ts: number;
   snapshot: Snapshot | null;
   traffic_month: { rx_bytes: number; tx_bytes: number };
   alerting: string[];
+}
+
+export interface ManagedAgent {
+  id: string;
+  owner_user_id: string;
+  owner_username: string;
+  label: string;
+  traffic_quota_gb: number;
+  traffic_reset_day: number;
+  enabled: boolean;
+  source: "config" | "user";
+  created_at: number;
+  updated_at: number;
+}
+
+export interface Invite {
+  id: string;
+  created_by: string;
+  created_by_username: string;
+  created_at: number;
+  expires_at: number;
+  used_at: number | null;
+  used_by: string | null;
+  used_by_username: string | null;
 }
 
 export interface SeriesResponse {
@@ -46,6 +81,7 @@ export interface Thresholds {
 export interface SettingsView {
   thresholds: Thresholds;
   retention_days: number;
+  retention_editable: boolean;
   telegram: { chat_id: string; bot_token_set: boolean };
   email: {
     smtp_host: string; smtp_port: number; smtp_user: string;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../api.js";
-import type { SettingsView, SettingsPatch, Thresholds } from "../types.js";
+import type { CurrentUser, Invite, SettingsView, SettingsPatch, Thresholds } from "../types.js";
 import { TopNav } from "../components/TopNav.js";
 import { useDark, setDark } from "../theme.js";
 
@@ -21,7 +21,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function Settings() {
+export function Settings({ user }: { user: CurrentUser }) {
   const dark = useDark();
   const [view, setView] = useState<SettingsView | null>(null);
   const [thresholds, setThresholds] = useState<Thresholds | null>(null);
@@ -32,10 +32,16 @@ export function Settings() {
   const [smtpPass, setSmtpPass] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [inviteDays, setInviteDays] = useState(7);
+  const [newInvite, setNewInvite] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteStatus, setInviteStatus] = useState("");
 
   const refs = {
     th: useRef<HTMLDivElement>(null),
     ch: useRef<HTMLDivElement>(null),
+    iv: useRef<HTMLDivElement>(null),
     bi: useRef<HTMLDivElement>(null),
     tm: useRef<HTMLDivElement>(null),
   };
@@ -55,6 +61,26 @@ export function Settings() {
     }).catch((e) => setStatus(String(e)));
   }
   useEffect(load, []);
+  useEffect(() => {
+    if (user.role === "admin") api.invites().then(setInvites).catch(() => {});
+  }, [user.role]);
+
+  async function generateInvite() {
+    setInviteBusy(true); setInviteStatus(""); setNewInvite("");
+    try {
+      const created = await api.createInvite(inviteDays);
+      setNewInvite(created.code);
+      setInvites(await api.invites());
+    } catch (e) { setInviteStatus(String(e)); }
+    finally { setInviteBusy(false); }
+  }
+
+  async function revokeInvite(id: string) {
+    if (!confirm("撤销这个尚未使用的邀请码？")) return;
+    const ok = await api.revokeInvite(id);
+    if (ok) setInvites((all) => all.filter((i) => i.id !== id));
+    else setInviteStatus("撤销失败，邀请码可能已经被使用");
+  }
 
   async function save() {
     if (!thresholds) return;
@@ -62,7 +88,7 @@ export function Settings() {
     setStatus("");
     const patch: SettingsPatch = {
       thresholds,
-      retention_days: retention,
+      ...(view?.retention_editable ? { retention_days: retention } : {}),
       telegram: { chat_id: chatId, ...(botToken ? { bot_token: botToken } : {}) },
       email: { ...email, ...(smtpPass ? { smtp_pass: smtpPass } : {}) },
     };
@@ -75,13 +101,14 @@ export function Settings() {
   const nav = [
     { r: refs.th, label: "阈值" },
     { r: refs.ch, label: "通知通道" },
+    ...(user.role === "admin" ? [{ r: refs.iv, label: "注册邀请码" }] : []),
     { r: refs.bi, label: "计费与保留" },
     { r: refs.tm, label: "主题" },
   ];
 
   return (
     <div className="app">
-      <TopNav active="settings" right={
+      <TopNav active="settings" user={user} right={
         <>
           {status && <span className={`mono ${status === "已保存" ? "ok" : "bad"}`} style={{ fontSize: 12 }}>{status}</span>}
           <button className="btn primary" onClick={save} disabled={saving || !thresholds}>
@@ -181,6 +208,61 @@ export function Settings() {
                 </div>
               </section>
 
+              {/* Invitation-only registration */}
+              {user.role === "admin" && (
+                <section ref={refs.iv} className="col gap-10" style={{ borderTop: "1px solid var(--line)", paddingTop: 24 }}>
+                  <div className="col gap-2">
+                    <span className="h-eyebrow">邀请注册</span>
+                    <h2>生成一次性注册邀请码</h2>
+                    <span className="mut" style={{ fontSize: 11 }}>邀请码使用一次即失效，明文只在生成时显示。</span>
+                  </div>
+                  <div className="row gap-8" style={{ alignItems: "flex-end" }}>
+                    <label className="col gap-4">
+                      <span className="h-eyebrow">有效期</span>
+                      <div className="row gap-4">
+                        <input className="input num" type="number" min={1} max={30} value={inviteDays}
+                          onChange={(e) => setInviteDays(Number(e.target.value))} />
+                        <span className="mut" style={{ fontSize: 11 }}>天</span>
+                      </div>
+                    </label>
+                    <button className="btn primary" disabled={inviteBusy} onClick={generateInvite}>
+                      {inviteBusy ? "生成中…" : "生成邀请码"}
+                    </button>
+                  </div>
+                  {newInvite && (
+                    <div className="card col gap-8" style={{ maxWidth: 620, borderColor: "var(--primary)" }}>
+                      <span className="h-eyebrow">新邀请码 · 请立即保存</span>
+                      <span className="mono" style={{ fontSize: 20, wordBreak: "break-all" }}>{newInvite}</span>
+                      <div className="row gap-8">
+                        <button className="btn primary" onClick={() => navigator.clipboard.writeText(newInvite)}>复制邀请码</button>
+                        <button className="btn ghost" onClick={() => setNewInvite("")}>隐藏</button>
+                      </div>
+                    </div>
+                  )}
+                  {inviteStatus && <p className="error">{inviteStatus}</p>}
+                  <div className="col gap-6" style={{ maxWidth: 760 }}>
+                    <span className="h-eyebrow">最近邀请码</span>
+                    {invites.length === 0 && <span className="mut" style={{ fontSize: 11 }}>尚未生成邀请码。</span>}
+                    {invites.map((invite) => {
+                      const expired = invite.expires_at <= Math.floor(Date.now() / 1000);
+                      const state = invite.used_at ? `已由 ${invite.used_by_username ?? "用户"} 使用` : expired ? "已过期" : "待使用";
+                      return (
+                        <div key={invite.id} className="row gap-12" style={{ padding: "8px 0", borderBottom: "1px solid var(--line-2)" }}>
+                          <span className={`dot ${invite.used_at || expired ? "off" : "ok"}`} />
+                          <span className="mono grow" style={{ fontSize: 11 }}>{state}</span>
+                          <span className="mono mut" style={{ fontSize: 10 }}>
+                            到期 {new Date(invite.expires_at * 1000).toLocaleString()}
+                          </span>
+                          {!invite.used_at && !expired && (
+                            <button className="btn ghost" onClick={() => revokeInvite(invite.id)}>撤销</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
               {/* Billing & retention */}
               <section ref={refs.bi} className="col gap-10" style={{ borderTop: "1px solid var(--line)", paddingTop: 24 }}>
                 <div className="col gap-2">
@@ -190,13 +272,16 @@ export function Settings() {
                 <div className="col gap-6" style={{ maxWidth: 460 }}>
                   <Field label="历史保留">
                     <input className="input num" type="number" value={retention}
+                      disabled={!view?.retention_editable}
                       onChange={(e) => setRetention(Number(e.target.value))} />
                     <span className="mut" style={{ fontSize: 11 }}>天 · SQLite</span>
                   </Field>
+                  {!view?.retention_editable && (
+                    <p className="mut" style={{ fontSize: 11 }}>历史保留天数由管理员统一管理。</p>
+                  )}
                   <p className="mut" style={{ fontSize: 11, lineHeight: 1.6 }}>
-                    流量计费起始日与每台配额由各 agent 自身配置（<span className="mono">traffic_reset_day</span>）
-                    与 dashboard 的 <span className="mono">config.json</span> 决定，
-                    在此不可改 —— 如需调整请改对应配置文件。
+                    每台 VPS 的流量配额和计费起始日可在“VPS 管理”页面修改；配置文件引导的旧 VPS
+                    仍需在服务器配置文件中调整。
                   </p>
                 </div>
               </section>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-// Minimal hash-based router. Routes: #/ , #/server/<id> , #/alerts , #/settings
+// Minimal hash-based router. Routes: #/ , #/server/<id> , #/agents , #/alerts , #/settings
 export function useHashRoute(): string {
   const [path, setPath] = useState(() => location.hash.slice(1) || "/");
   useEffect(() => {

@@ -5,7 +5,7 @@ const thresholds = { cpu_pct: 90, mem_pct: 90, disk_pct: 90, traffic_pct: 90, of
 
 function engine() {
   const sent: string[] = [];
-  const eng = new AlertEngine(() => thresholds, { send: async (m: string) => { sent.push(m); } });
+  const eng = new AlertEngine(() => thresholds, { send: async (_vps: string, m: string) => { sent.push(m); } });
   return { eng, sent };
 }
 

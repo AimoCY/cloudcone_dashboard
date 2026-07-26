@@ -27,12 +27,37 @@ describe("loadConfig", () => {
   it("parses a full config", () => {
     const c = loadConfig(tmpConfig(full));
     expect(c.agents[0].id).toBe("vps-a");
+    expect(c.agents[0].owner_user_id).toBe("admin");
+    expect(c.users[0]).toMatchObject({ id: "admin", username: "admin", role: "admin" });
     expect(c.thresholds.cpu_pct).toBe(90);
   });
-  it("rejects config with no agents", () => {
-    const bad = JSON.parse(full);
-    bad.agents = [];
-    expect(() => loadConfig(tmpConfig(JSON.stringify(bad)))).toThrow();
+  it("parses users and validates agent ownership", () => {
+    const body = JSON.parse(full);
+    delete body.admin_password_hash;
+    body.users = [
+      { id: "root", username: "root", password_hash: "hash-a", role: "admin" },
+      { id: "alice", username: "alice", password_hash: "hash-b", role: "user" },
+    ];
+    body.agents[0].owner_user_id = "alice";
+    const c = loadConfig(tmpConfig(JSON.stringify(body)));
+    expect(c.agents[0].owner_user_id).toBe("alice");
+
+    body.agents[0].owner_user_id = "missing";
+    expect(() => loadConfig(tmpConfig(JSON.stringify(body)))).toThrow();
+  });
+  it("allows a fresh dashboard with no agents before self-service onboarding", () => {
+    const body = JSON.parse(full);
+    body.agents = [];
+    expect(loadConfig(tmpConfig(JSON.stringify(body))).agents).toEqual([]);
+  });
+  it("rejects configured usernames that differ only by case", () => {
+    const body = JSON.parse(full);
+    delete body.admin_password_hash;
+    body.users = [
+      { id: "root", username: "Admin", password_hash: "hash-a", role: "admin" },
+      { id: "other", username: "admin", password_hash: "hash-b", role: "user" },
+    ];
+    expect(() => loadConfig(tmpConfig(JSON.stringify(body)))).toThrow();
   });
   it("rejects missing session_secret", () => {
     const bad = JSON.parse(full);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import type { AlertLogRow } from "../types.js";
+import type { AlertLogRow, CurrentUser } from "../types.js";
 import { useOverview } from "../hooks.js";
 import { metricLabel, fmtTime } from "../format.js";
 import { TopNav } from "../components/TopNav.js";
@@ -14,7 +14,7 @@ function eventValue(e: AlertLogRow): string {
   return `${e.value.toFixed(0)}%`;
 }
 
-export function Alerts() {
+export function Alerts({ user }: { user: CurrentUser }) {
   const { rows } = useOverview();
   const [log, setLog] = useState<AlertLogRow[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
@@ -42,7 +42,7 @@ export function Alerts() {
 
   return (
     <div className="app">
-      <TopNav active="alerts" right={
+      <TopNav active="alerts" user={user} right={
         firing > 0
           ? <span className="chip bad"><span className="dot bad" />{firing} 告警中</span>
           : <span className="chip"><span className="dot ok" />全部正常</span>

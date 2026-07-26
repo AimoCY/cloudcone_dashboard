@@ -10,7 +10,7 @@ export interface Thresholds {
 export interface MetricValues {
   cpu_pct: number; mem_pct: number; disk_pct: number; traffic_pct: number;
 }
-export interface Notifier { send(message: string): Promise<void>; }
+export interface Notifier { send(vps: string, message: string): Promise<void>; }
 
 export interface AlertEvent {
   vps_id: string;
@@ -35,7 +35,7 @@ export class AlertEngine {
   // `getThresholds` is read fresh on every evaluation so live settings edits
   // take effect immediately. `onEvent` records transitions to the alert log.
   constructor(
-    private getThresholds: () => Thresholds,
+    private getThresholds: (vps: string) => Thresholds,
     private notifier: Notifier,
     private onEvent: (e: AlertEvent) => void = () => {},
   ) {}
@@ -48,7 +48,7 @@ export class AlertEngine {
 
   /** Evaluate the four threshold metrics for one VPS sample. */
   evaluate(vps: string, v: MetricValues, ts: number): void {
-    const th = this.getThresholds();
+    const th = this.getThresholds(vps);
     const limits: Record<keyof MetricValues, number> = {
       cpu_pct: th.cpu_pct, mem_pct: th.mem_pct,
       disk_pct: th.disk_pct, traffic_pct: th.traffic_pct,
@@ -66,20 +66,20 @@ export class AlertEngine {
     if (c.state === "alerting") {
       c.state = "ok"; c.over = 0; c.under = 0;
       this.onEvent({ vps_id: vps, metric: "offline", event: "recovered", value: 0, ts });
-      void this.notifier.send(`🟢 [${vps}] ${LABELS.offline} 已恢复（agent 重新上报）`);
+      void this.notifier.send(vps, `🟢 [${vps}] ${LABELS.offline} 已恢复（agent 重新上报）`);
     }
   }
 
   /** Fire offline alerts for VPS not seen within offline_seconds. */
   checkOffline(now: number): void {
-    const limit = this.getThresholds().offline_seconds;
     for (const [vps, seen] of this.lastSeen) {
+      const limit = this.getThresholds(vps).offline_seconds;
       const c = this.cell(`${vps}|offline`);
       const stale = now - seen > limit;
       if (stale && c.state === "ok") {
         c.state = "alerting";
         this.onEvent({ vps_id: vps, metric: "offline", event: "triggered", value: now - seen, ts: now });
-        void this.notifier.send(`🔴 [${vps}] agent 已离线（超过 ${limit}s 无数据）`);
+        void this.notifier.send(vps, `🔴 [${vps}] agent 已离线（超过 ${limit}s 无数据）`);
       }
     }
   }
@@ -95,6 +95,14 @@ export class AlertEngine {
     return out;
   }
 
+  /** Forget all runtime state when a user removes a dynamically managed VPS. */
+  remove(vps: string): void {
+    this.lastSeen.delete(vps);
+    for (const key of this.cells.keys()) {
+      if (key.startsWith(`${vps}|`)) this.cells.delete(key);
+    }
+  }
+
   private step(vps: string, metric: string, value: number, limit: number, ts: number): void {
     const c = this.cell(`${vps}|${metric}`);
     if (value >= limit) {
@@ -102,7 +110,7 @@ export class AlertEngine {
       if (c.state === "ok" && c.over >= 2) {
         c.state = "alerting";
         this.onEvent({ vps_id: vps, metric, event: "triggered", value, ts });
-        void this.notifier.send(
+        void this.notifier.send(vps,
           `🔴 [${vps}] ${LABELS[metric] ?? metric} ${value.toFixed(1)}% 超过阈值 ${limit}%`);
       }
     } else {
@@ -110,7 +118,7 @@ export class AlertEngine {
       if (c.state === "alerting" && c.under >= 2) {
         c.state = "ok";
         this.onEvent({ vps_id: vps, metric, event: "recovered", value, ts });
-        void this.notifier.send(
+        void this.notifier.send(vps,
           `🟢 [${vps}] ${LABELS[metric] ?? metric} 已恢复（当前 ${value.toFixed(1)}%）`);
       }
     }

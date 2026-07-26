@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { openDb, type Db } from "./db.js";
 import type { Snapshot } from "./contract.js";
+import { hashSecret } from "./secrets.js";
 
 function snap(over: Partial<Snapshot> = {}): Snapshot {
   return {
@@ -21,6 +22,34 @@ function snap(over: Partial<Snapshot> = {}): Snapshot {
 function memDb(): Db { return openDb(":memory:"); }
 
 describe("db", () => {
+  it("registers a user with a valid invite exactly once", () => {
+    const db = memDb();
+    db.upsertBootstrapUser({ id: "admin", username: "admin", password_hash: "hash", role: "admin" }, 1);
+    db.createInvite({
+      id: "invite", code_hash: hashSecret("CODE"), created_by: "admin", created_at: 2, expires_at: 100,
+    });
+    expect(db.registerUserWithInvite({
+      id: "alice", username: "alice", password_hash: "alice-hash", invite_code_hash: hashSecret("CODE"), now: 3,
+    })).toBe("ok");
+    expect(db.getUserByUsername("ALICE")?.id).toBe("alice");
+    expect(db.registerUserWithInvite({
+      id: "bob", username: "bob", password_hash: "bob-hash", invite_code_hash: hashSecret("CODE"), now: 4,
+    })).toBe("invalid_invite");
+  });
+
+  it("stores dynamic agents with owner filtering and hashed-token lookup", () => {
+    const db = memDb();
+    db.upsertBootstrapUser({ id: "admin", username: "admin", password_hash: "hash", role: "admin" }, 1);
+    db.upsertBootstrapUser({ id: "alice", username: "alice", password_hash: "hash", role: "user" }, 1);
+    db.createManagedAgent({
+      id: "vps-a", owner_user_id: "alice", label: "A", token_hash: hashSecret("TOKEN"),
+      traffic_quota_gb: 100, traffic_reset_day: 1,
+    }, 2);
+    expect(db.getManagedAgents("alice", false).map((a) => a.id)).toEqual(["vps-a"]);
+    expect(db.getManagedAgents("admin", true).map((a) => a.id)).toEqual(["vps-a"]);
+    expect(db.getManagedAgentByTokenHash(hashSecret("TOKEN"))?.owner_user_id).toBe("alice");
+  });
+
   it("stores a snapshot and reads it back as the latest", () => {
     const db = memDb();
     db.insertSnapshot(snap());

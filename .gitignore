@@ -11,7 +11,21 @@ dashboard/dist/
 *.db-*
 *.log
 state.json
+# Live dashboard/agent configuration
+/dashboard.config.json
+/dashboard/dashboard.config.json
+/settings.json
+/dashboard/settings.json
+/agent/config.yaml
+deploy/config-samples/*.local.json
 # Local config (never commit secrets)
 deploy/config-samples/*.local.yaml
 .env
+# Private keys and certificate containers
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
 .DS_Store

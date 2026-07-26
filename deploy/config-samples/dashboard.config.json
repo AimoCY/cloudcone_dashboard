@@ -1,13 +1,14 @@
 {
   "listen_port": 8787,
   "public_port": 9443,
-  "admin_password_hash": "REPLACE_WITH_BCRYPT_HASH",
   "session_secret": "REPLACE_WITH_A_LONG_RANDOM_STRING",
   "retention_days": 7,
   "db_path": "/var/lib/vps-dashboard/dashboard.db",
+  "users": [
+    { "id": "admin", "username": "admin", "password_hash": "REPLACE_WITH_ADMIN_BCRYPT_HASH", "role": "admin" }
+  ],
   "agents": [
-    { "id": "vps-a", "label": "VPS-A Tokyo", "token": "REPLACE_TOKEN_A", "traffic_quota_gb": 1000 },
-    { "id": "vps-b", "label": "VPS-B", "token": "REPLACE_TOKEN_B", "traffic_quota_gb": 1000 }
+    { "id": "vps-a", "label": "EXISTING VPS (OPTIONAL)", "token": "REPLACE_EXISTING_AGENT_TOKEN", "traffic_quota_gb": 1000, "traffic_reset_day": 1, "owner_user_id": "admin" }
   ],
   "thresholds": {
     "cpu_pct": 90, "mem_pct": 90, "disk_pct": 90, "traffic_pct": 90, "offline_seconds": 60

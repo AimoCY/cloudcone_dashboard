@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import type { OverviewRow, Snapshot, SeriesMetric, Proc } from "../types.js";
+import type { CurrentUser, OverviewRow, Snapshot, SeriesMetric, Proc } from "../types.js";
 import { useOverview } from "../hooks.js";
 import { type Range, RANGE_SECONDS } from "../range.js";
 import { GB, fmtBps, fmtTraffic, gb, uptimeStr, memPct } from "../format.js";
@@ -43,7 +43,7 @@ function tileValue(key: SeriesMetric, s: Snapshot): { v: string; u: string; tone
   return { v: f[0], u: f[1] ?? "", tone: "" };
 }
 
-export function ServerDetail({ vpsId }: { vpsId: string }) {
+export function ServerDetail({ vpsId, user }: { vpsId: string; user: CurrentUser }) {
   const { rows, loaded } = useOverview();
   const [range, setRange] = useState<Range>("24h");
   const [selected, setSelected] = useState<SeriesMetric>("cpu_pct");
@@ -75,7 +75,7 @@ export function ServerDetail({ vpsId }: { vpsId: string }) {
   if (loaded && !row) {
     return (
       <div className="app">
-        <TopNav active="fleet" />
+        <TopNav active="fleet" user={user} />
         <div className="section"><p className="mut">找不到服务器 <span className="mono">{vpsId}</span>。<a href="#/">返回 Fleet</a></p></div>
       </div>
     );
@@ -91,7 +91,7 @@ export function ServerDetail({ vpsId }: { vpsId: string }) {
 
   return (
     <div className="app">
-      <TopNav active="fleet" right={
+      <TopNav active="fleet" user={user} right={
         row && (row.alerting.length > 0
           ? <span className="chip bad"><span className="dot bad" />{row.alerting.length} 告警</span>
           : <span className="chip"><span className="dot ok" />正常</span>)

@@ -18,21 +18,36 @@ function tmpPath(): string {
 describe("SettingsStore", () => {
   it("uses defaults when no override file exists", () => {
     const s = new SettingsStore(tmpPath(), defaults);
-    expect(s.get().thresholds.cpu_pct).toBe(90);
-    expect(s.get().retention_days).toBe(7);
+    expect(s.get("admin").thresholds.cpu_pct).toBe(90);
+    expect(s.get("admin").retention_days).toBe(7);
   });
 
   it("update merges nested fields, leaves siblings intact, and persists", () => {
     const path = tmpPath();
     const s = new SettingsStore(path, defaults);
-    s.update({ thresholds: { cpu_pct: 70 }, retention_days: 14 });
-    expect(s.get().thresholds.cpu_pct).toBe(70);
-    expect(s.get().thresholds.mem_pct).toBe(90); // untouched
-    expect(s.get().retention_days).toBe(14);
+    s.update("admin", { thresholds: { cpu_pct: 70 }, retention_days: 14 }, true);
+    expect(s.get("admin").thresholds.cpu_pct).toBe(70);
+    expect(s.get("admin").thresholds.mem_pct).toBe(90); // untouched
+    expect(s.get("admin").retention_days).toBe(14);
 
     // A fresh store loads the persisted overrides on top of defaults.
     const reloaded = new SettingsStore(path, defaults);
-    expect(reloaded.get().thresholds.cpu_pct).toBe(70);
-    expect(reloaded.get().retention_days).toBe(14);
+    expect(reloaded.get("admin").thresholds.cpu_pct).toBe(70);
+    expect(reloaded.get("admin").retention_days).toBe(14);
+  });
+
+  it("keeps normal-user thresholds and notification credentials isolated", () => {
+    const s = new SettingsStore(tmpPath(), defaults);
+    s.update("alice", {
+      thresholds: { cpu_pct: 65 },
+      telegram: { bot_token: "ALICE-BT", chat_id: "ALICE-CID" },
+      retention_days: 30,
+    });
+
+    expect(s.get("alice").thresholds.cpu_pct).toBe(65);
+    expect(s.get("alice").telegram.bot_token).toBe("ALICE-BT");
+    expect(s.get("admin").thresholds.cpu_pct).toBe(90);
+    expect(s.get("admin").telegram.bot_token).toBe("BT");
+    expect(s.getRetentionDays()).toBe(7); // only an admin can change this
   });
 });
